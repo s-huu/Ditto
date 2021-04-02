@@ -34,7 +34,7 @@ class LogisticRegression(torch.nn.Module):
         super(LogisticRegression, self).__init__()
         self.linear = torch.nn.Linear(input_dim, output_dim)
 
-    
+
     def trainable_parameters(self):
         return [p for p in self.parameters() if p.requires_grad]
 
@@ -54,9 +54,8 @@ class ErmOptimizer(Optimizer):
         self.model = model
         self.global_w = None
         self.global_w_on_last_update = None
-        self.pFedMe = False
         self.dynamic_lambda = False
-        
+
 
     def initialize_w(self):
         self.w = torch_to_numpy(self.model.trainable_parameters())
@@ -69,7 +68,7 @@ class ErmOptimizer(Optimizer):
         self. w = np.copy(w)
         self.w_on_last_update = np.copy(w)
         numpy_to_torch(self.w, self.model)
-        
+
     def reset_global_w(self,global_w):
         self. global_w = np.copy(global_w)
         self.global_w_on_last_update = np.copy(global_w)
@@ -85,14 +84,14 @@ class ErmOptimizer(Optimizer):
         if self.personalized:
             self.global_w_on_last_update = self.global_w
 
-    
+
     def interpolate(self):
         with torch.no_grad():
             for (p,g_p) in zip(self.model.trainable_parameters(),self.global_model.trainable_parameters()):
                 p.mul_(1-self.interpolation_ratio)
                 p.add_(g_p,alpha=self.interpolation_ratio)
         return True
-    
+
     def interpolate_copy(self,first_time=True):
         if first_time:
             self.interpolate_copy_model = copy.deepcopy(self.model)
@@ -104,8 +103,8 @@ class ErmOptimizer(Optimizer):
                 i_p.add_(p,alpha=1-self.interpolation_ratio)
                 i_p.add_(g_p,alpha=self.interpolation_ratio)
         return True
-    
-    
+
+
     def run_step_global(self,x,y):
         preds = self.global_model(x)
         loss = cross_entropy(preds, y)
@@ -114,14 +113,7 @@ class ErmOptimizer(Optimizer):
             p.data -= self.learning_rate * g.data
         return True
 
-    def run_step_global_pFedMe(self,x,y):
-        loss = self.lmbda*self.model_dist_norm_var()
-        gradient = torch.autograd.grad(loss, self.global_model.trainable_parameters())
-        for p, g in zip(self.global_model.trainable_parameters(), gradient):
-            p.data -= self.learning_rate * g.data
-        return True
 
-    
     def model_dist_norm_var(self, norm=2):
         size = 0
         for layer in self.model.trainable_parameters():
@@ -199,36 +191,28 @@ class ErmOptimizer(Optimizer):
         loss = cross_entropy(preds, y)
         gradient = torch.autograd.grad(loss, self.model.trainable_parameters())
         return loss, gradient
-    
+
 
     def run_step(self, batched_x, batched_y, lmbda):
         """Run single gradient step on (batched_x, batched_y) and return loss encountered"""
         if self.personalized:
-            if self.pFedMe:
-                grad = self.gradient(batched_x,batched_y)
-                for p, g in zip(self.model.trainable_parameters(), grad):
-                    p.data -= self.learning_rate * g.data
-                self.run_step_global_pFedMe(batched_x,batched_y)
-                for p, g_p in zip(self.model.trainable_parameters(), self.global_model.trainable_parameters()):
-                    p.data = g_p.data
+            if self.dynamic_lambda:
+                # self.lmbda = np.random.choice([10,15,20])
+                self.tune_lambda(batched_x,batched_y)
             else:
-                self.run_step_global(batched_x,batched_y)
-                if self.dynamic_lambda:
-                    # self.lmbda = np.random.choice([10,15,20])
-                    self.tune_lambda(batched_x,batched_y)
-                else:
-                    self.lmbda = lmbda
-                grad = self.gradient(batched_x,batched_y)
-                for p, g in zip(self.model.trainable_parameters(), grad):
-                    p.data -= self.learning_rate * g.data          
+                self.lmbda = lmbda
+            grad = self.gradient(batched_x,batched_y)
+            for p, g in zip(self.model.trainable_parameters(), grad):
+                p.data -= self.learning_rate * g.data
+            self.run_step_global(batched_x,batched_y)
             return self.loss(batched_x,batched_y)
-        
+
         loss, gradient = self.loss_and_gradient(batched_x, batched_y)
         for p, g in zip(self.model.trainable_parameters(), gradient):
             p.data -= self.learning_rate * g.data
 
         return loss.item()
-        
+
 
 
     def correct(self, x, y, mode='local'):
