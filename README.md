@@ -14,6 +14,8 @@ Theoretically, we  analyze the ability of Ditto to achieve
 fairness and robustness simultaneously on a class of linear problems.
 Empirically, across a suite of federated datasets, we show that Ditto not only achieves competitive performance relative to recent personalization methods, but also enables more accurate, robust, and fair models relative to state-of-the-art fair or robust baselines.
 
+This version of pytorch implementation is based off of the [Simplicial-FL repository](https://github.com/krishnap25/simplicial-fl) ([Laguel et al. 2021](https://ieeexplore.ieee.org/document/9400318))
+
 
 
 ### *We also provide [Tensorflow implementation](https://github.com/litian96/ditto)*
